@@ -147,14 +147,23 @@ struct ContentView: View {
 
 final class Stopwatch: ObservableObject {
     @Published private var data = StopwatchData()
+    @Published private var history: [StopwatchData] = []
+
+    private enum State {
+        case running
+        case stopped
+    }
+
+    private var state = State.stopped
+
     private var timer: Timer?
     
     var total: TimeInterval {
-        data.totalTime
+        history.totalTime + data.totalTime
     }
     
     var isRunning: Bool {
-        data.absoluteStartTime != nil
+        state == .running
     }
     
     func start() {
@@ -162,41 +171,44 @@ final class Stopwatch: ObservableObject {
             self.data.currentTime = Date().timeIntervalSinceReferenceDate
         })
         data.start(at: Date().timeIntervalSinceReferenceDate)
+        state = .running
     }
     
     func stop() {
         timer?.invalidate()
         timer = nil
-        data.stop()
+        history.append(data)
+        data = StopwatchData()
+        state = .stopped
     }
     
     func reset() {
         stop()
-        data = StopwatchData()
+        history.removeAll()
     }
-    
+
     deinit {
         stop()
     }
 }
 
-struct StopwatchData {
-    var absoluteStartTime: TimeInterval?
-    var currentTime: TimeInterval = 0
-    var additionalTime: TimeInterval = 0
-    
+private extension Array where Element == StopwatchData {
     var totalTime: TimeInterval {
-        guard let start = absoluteStartTime else { return additionalTime }
-        return additionalTime + currentTime - start
+        map { $0.totalTime }.reduce(0) { $0 + $1 }
+    }
+}
+
+struct StopwatchData {
+    private(set) var absoluteStartTime: TimeInterval?
+    var currentTime: TimeInterval = 0
+
+    var totalTime: TimeInterval {
+        guard let start = absoluteStartTime else { return 0 }
+        return currentTime - start
     }
     
     mutating func start(at time: TimeInterval) {
         currentTime = time
         absoluteStartTime = time
-    }
-    
-    mutating func stop() {
-        additionalTime = totalTime
-        absoluteStartTime = nil
     }
 }
